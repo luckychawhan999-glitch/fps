@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROBLOX RIVALS: ARENA FPS</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Three.js & OrbitControls / PointerLock -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- Cannon-es Physics Engine -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    
+    <!-- PeerJS WebRTC Multiplayer CDN -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <!-- Game Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Sniper Impact Effect Overlay -->
+    <div id="impact-overlay" class="hidden"></div>
+
+    <!-- UI Overlay -->
+    <div id="ui-container">
+        <!-- Main Menu -->
+        <div id="main-menu" class="glass-panel active">
+            <h1 class="logo">RIVALS <span class="highlight">ARENA</span></h1>
+            <p class="subtitle">FPS MULTIPLAYER & RANGE</p>
+            
+            <div class="menu-buttons">
+                <button id="btn-singleplayer" class="btn primary">TRAINING RANGE</button>
+                <button id="btn-multiplayer" class="btn secondary">MULTIPLAYER</button>
+                <button id="btn-settings" class="btn tertiary">SETTINGS</button>
+            </div>
+        </div>
+
+        <!-- Multiplayer Sub-Menu -->
+        <div id="multiplayer-menu" class="glass-panel hidden">
+            <h2>MULTIPLAYER <span class="highlight">HUB</span></h2>
+            <div class="mp-options">
+                <button id="btn-create-room" class="btn primary">CREATE ROOM</button>
+                <div class="join-box">
+                    <input type="text" id="room-code-input" placeholder="ENTER ROOM CODE..." maxlength="6">
+                    <button id="btn-join-room" class="btn secondary">JOIN</button>
+                </div>
+                <button id="btn-mp-back" class="btn ghost">BACK</button>
+            </div>
+        </div>
+
+        <!-- Room Lobby Display -->
+        <div id="lobby-panel" class="glass-panel hidden">
+            <h2>ROOM <span class="highlight" id="display-room-code">------</span></h2>
+            <p>Share code with friends to join (Up to 4 Players)</p>
+            <div class="room-actions">
+                <button id="btn-copy-code" class="btn secondary">COPY CODE</button>
+                <button id="btn-start-match" class="btn primary">START MATCH</button>
+                <button id="btn-leave-room" class="btn ghost">LEAVE</button>
+            </div>
+            <div id="player-list-box">
+                <h3>CONNECTED PLAYERS:</h3>
+                <ul id="player-list"></ul>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settings-menu" class="glass-panel hidden">
+            <h2>GAME <span class="highlight">SETTINGS</span></h2>
+            <div class="setting-row">
+                <label for="slider-sens">Mouse Sensitivity</label>
+                <input type="range" id="slider-sens" min="0.5" max="5" step="0.1" value="2">
+                <span id="val-sens">2.0</span>
+            </div>
+            <div class="setting-row">
+                <label for="slider-fov">Field of View (FOV)</label>
+                <input type="range" id="slider-fov" min="70" max="110" value="90">
+                <span id="val-fov">90</span>
+            </div>
+            <div class="setting-row">
+                <label for="slider-vol">Master Volume</label>
+                <input type="range" id="slider-vol" min="0" max="1" step="0.1" value="0.8">
+                <span id="val-vol">80%</span>
+            </div>
+            <button id="btn-settings-back" class="btn secondary">SAVE & CLOSE</button>
+        </div>
+
+        <!-- HUD (In-Game) -->
+        <div id="hud" class="hidden">
+            <!-- Dynamic Crosshair -->
+            <div id="crosshair">
+                <div class="ch-line top"></div>
+                <div class="ch-line bottom"></div>
+                <div class="ch-line left"></div>
+                <div class="ch-line right"></div>
+                <div class="ch-dot"></div>
+            </div>
+
+            <!-- Sniper Scope Overlay -->
+            <div id="sniper-scope" class="hidden">
+                <div class="scope-ring"></div>
+                <div class="scope-cross-h"></div>
+                <div class="scope-cross-v"></div>
+            </div>
+
+            <!-- Health Bar -->
+            <div id="health-box">
+                <div class="hud-label">HEALTH</div>
+                <div class="bar-background">
+                    <div id="health-bar-fill"></div>
+                </div>
+                <span id="health-value">100</span>
+            </div>
+
+            <!-- Weapon & Ammo Display -->
+            <div id="ammo-box">
+                <div id="weapon-name">ASSAULT RIFLE</div>
+                <div id="ammo-count"><span id="ammo-cur">20</span> / <span id="ammo-max">20</span></div>
+            </div>
+
+            <!-- Stats Panel (Single Player) -->
+            <div id="sp-stats" class="hud-panel left-top">
+                <div>KILLS: <span id="sp-kills" class="stat-val">0</span></div>
+                <div>ACCURACY: <span id="sp-acc" class="stat-val">100%</span></div>
+                <div>HEADSHOTS: <span id="sp-headshots" class="stat-val">0</span></div>
+                <div>STREAK: <span id="sp-streak" class="stat-val">0</span></div>
+            </div>
+
+            <!-- Top Match Header -->
+            <div id="top-info" class="hud-panel center-top">
+                <div id="game-mode-tag">RANGE</div>
+                <div id="network-ping">PING: <span id="ping-val">0</span> ms</div>
+                <div id="fps-display">FPS: 60</div>
+            </div>
+
+            <!-- Kill Feed -->
+            <div id="kill-feed"></div>
+
+            <!-- Hit Indicator / Notification -->
+            <div id="hit-notification" class="hidden">HEADSHOT!</div>
+
+            <!-- Scoreboard (Tab Key) -->
+            <div id="scoreboard" class="glass-panel hidden">
+                <h3>MATCH SCOREBOARD</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>PLAYER</th>
+                            <th>KILLS</th>
+                            <th>DEATHS</th>
+                            <th>PING</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scoreboard-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script Files -->
+    <script src="config.js"></script>
+    <script src="audio.js"></script>
+    <script src="effects.js"></script>
+    <script src="physics.js"></script>
+    <script src="arena.js"></script>
+    <script src="weapon.js"></script>
+    <script src="player.js"></script>
+    <script src="enemy.js"></script>
+    <script src="network.js"></script>
+    <script src="ui.js"></script>
+    <script src="singleplayer.js"></script>
+    <script src="multiplayer.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
