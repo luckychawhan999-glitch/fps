@@ -7,15 +7,18 @@ class Game {
 
         // Three.js Core Setup
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x87ceeb); // Vibrant Sky Blue
+        this.scene.background = new THREE.Color(0x87ceeb);
 
         this.camera = new THREE.PerspectiveCamera(CONFIG.FOV, window.innerWidth / window.innerHeight, CONFIG.NEAR, CONFIG.FAR);
         
+        // FIX CAMERA BUG: Set rotation order to YXZ to prevent axis flipping!
+        this.camera.rotation.order = 'YXZ';
+
         this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.shadowMap.enabled = true;
 
-        // Add Lighting
+        // Lighting
         const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
         this.scene.add(hemiLight);
 
@@ -24,7 +27,7 @@ class Game {
         dirLight.castShadow = true;
         this.scene.add(dirLight);
 
-        // Modules Initialization
+        // Modules
         this.physics = new PhysicsWorld();
         this.effects = new ParticleEffects(this.scene);
         this.arena = new ArenaMap(this.scene, this.physics);
@@ -45,28 +48,37 @@ class Game {
             this.renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Pointer Lock Controls for First Person Camera
         this.canvas.addEventListener('click', () => {
             if (this.mode !== 'MENU') this.canvas.requestPointerLock();
         });
 
+        // Fixed FPS Look Control
         window.addEventListener('mousemove', (e) => {
             if (document.pointerLockElement === this.canvas) {
-                this.camera.rotation.y -= e.movementX * 0.002;
-                this.camera.rotation.x -= e.movementY * 0.002;
-                this.camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotation.x));
+                const sens = 0.002;
+                this.camera.rotation.y -= e.movementX * sens;
+                this.camera.rotation.x -= e.movementY * sens;
+                this.camera.rotation.x = Math.max(-Math.PI / 2.05, Math.min(Math.PI / 2.05, this.camera.rotation.x));
             }
         });
 
         window.addEventListener('mousedown', (e) => {
             if (e.button === 0 && document.pointerLockElement === this.canvas) {
                 let targets = [];
-                if (this.mode === 'SINGLEPLAYER') targets = this.spMode.getHitTargets();
+                if (this.mode === 'SINGLEPLAYER') {
+                    targets = this.spMode.getHitTargets();
+                } else if (this.mode === 'MULTIPLAYER' && this.mpMode) {
+                    targets = this.mpMode.getRemoteHitTargets();
+                }
 
                 const result = this.player.weaponSystem.shoot(this.raycaster, targets, this.player.body.velocity);
                 
-                if (this.mode === 'SINGLEPLAYER') {
-                    this.spMode.onShotFired(result);
+                if (result) {
+                    if (this.mode === 'SINGLEPLAYER') {
+                        this.spMode.onShotFired(result);
+                    } else if (this.mode === 'MULTIPLAYER' && this.mpMode) {
+                        this.mpMode.onShotFired(result);
+                    }
                 }
             }
         });
@@ -102,7 +114,6 @@ class Game {
     }
 }
 
-// Start Game On Load
 window.addEventListener('DOMContentLoaded', () => {
     new Game();
 });
