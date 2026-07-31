@@ -2,151 +2,139 @@ class WeaponSystem {
     constructor(camera, effects) {
         this.camera = camera;
         this.effects = effects;
+
         this.currentWeaponKey = 'RIFLE';
-        this.weaponData = CONFIG.WEAPONS.RIFLE;
-        
-        this.ammoCurrent = this.weaponData.ammoMax;
+        this.currentWeapon = CONFIG.WEAPONS.RIFLE;
+        this.currentAmmo = this.currentWeapon.magSize;
         this.isReloading = false;
         this.isScoped = false;
-        this.lastFired = 0;
+        this.lastShotTime = 0;
 
-        this.weaponContainer = new THREE.Group();
-        this.camera.add(this.weaponContainer);
-        this.buildWeaponMeshes();
+        // Weapon Models Rig attached to Camera
+        this.weaponRig = new THREE.Group();
+        this.camera.add(this.weaponRig);
+        this.weaponModels = {};
+
+        this.buildWeaponModels();
         this.selectWeapon('RIFLE');
     }
 
-    buildWeaponMeshes() {
-        // Procedural 3D Weapon Models attached to camera
-        this.meshes = {};
+    buildWeaponModels() {
+        // 1. Katana
+        const katana = new THREE.Group();
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.2, 0.08), new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9 }));
+        blade.position.set(0, 0.5, 0);
+        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+        handle.position.set(0, -0.1, 0);
+        katana.add(blade, handle);
+        katana.position.set(0.3, -0.3, -0.5);
+        katana.rotation.x = Math.PI / 4;
+        this.weaponRig.add(katana);
+        this.weaponModels['KNIFE'] = katana;
 
-        // Katana
-        const katanaGroup = new THREE.Group();
-        const blade = new THREE.Mesh(
-            new THREE.BoxGeometry(0.05, 1.2, 0.05),
-            new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.9 })
-        );
-        blade.position.set(0.3, -0.2, -0.6);
-        katanaGroup.add(blade);
-        this.meshes.KNIFE = katanaGroup;
+        // 2. Pistol
+        const pistol = new THREE.Group();
+        const pBody = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 0.4), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+        const pGrip = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.25, 0.12), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+        pGrip.position.set(0, -0.15, 0.1);
+        pGrip.rotation.x = -0.2;
+        pistol.add(pBody, pGrip);
+        pistol.position.set(0.25, -0.25, -0.4);
+        this.weaponRig.add(pistol);
+        this.weaponModels['PISTOL'] = pistol;
 
-        // Assault Rifle
-        const rifleGroup = new THREE.Group();
-        const body = new THREE.Mesh(
-            new THREE.BoxGeometry(0.12, 0.2, 0.8),
-            new THREE.MeshStandardMaterial({ color: 0x1a1d24 })
-        );
-        body.position.set(0.25, -0.25, -0.5);
-        rifleGroup.add(body);
-        this.meshes.RIFLE = rifleGroup;
+        // 3. Assault Rifle with COD Holo Sight
+        const rifle = new THREE.Group();
+        const rBody = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 0.8), new THREE.MeshStandardMaterial({ color: 0x2d3436 }));
+        const rMag = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.12), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+        rMag.position.set(0, -0.2, 0);
+        
+        // COD Holo Sight Frame & Glowing Reticle
+        const sightFrame = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.15), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+        sightFrame.position.set(0, 0.12, -0.1);
+        const reticle = new THREE.Mesh(new THREE.RingGeometry(0.015, 0.02, 16), new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide }));
+        reticle.position.set(0, 0.12, -0.12);
 
-        // Pistol
-        const pistolGroup = new THREE.Group();
-        const pBody = new THREE.Mesh(
-            new THREE.BoxGeometry(0.08, 0.15, 0.4),
-            new THREE.MeshStandardMaterial({ color: 0x333333 })
-        );
-        pBody.position.set(0.2, -0.2, -0.4);
-        pistolGroup.add(pBody);
-        this.meshes.PISTOL = pistolGroup;
+        rifle.add(rBody, rMag, sightFrame, reticle);
+        rifle.position.set(0.25, -0.25, -0.5);
+        this.weaponRig.add(rifle);
+        this.weaponModels['RIFLE'] = rifle;
 
-        // Sniper
-        const sniperGroup = new THREE.Group();
-        const sBody = new THREE.Mesh(
-            new THREE.BoxGeometry(0.14, 0.22, 1.2),
-            new THREE.MeshStandardMaterial({ color: 0x0d0e12 })
-        );
-        sBody.position.set(0.25, -0.25, -0.7);
-        sniperGroup.add(sBody);
-        this.meshes.SNIPER = sniperGroup;
-
-        Object.values(this.meshes).forEach(m => {
-            m.visible = false;
-            this.weaponContainer.add(m);
-        });
+        // 4. Sniper
+        const sniper = new THREE.Group();
+        const sBody = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 1.2), new THREE.MeshStandardMaterial({ color: 0x353b48 }));
+        const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.4), new THREE.MeshStandardMaterial({ color: 0x000000 }));
+        scope.rotation.x = Math.PI / 2;
+        scope.position.set(0, 0.12, -0.1);
+        sniper.add(sBody, scope);
+        sniper.position.set(0.25, -0.25, -0.6);
+        this.weaponRig.add(sniper);
+        this.weaponModels['SNIPER'] = sniper;
     }
 
     selectWeapon(key) {
-        if (!CONFIG.WEAPONS[key] || this.isReloading) return;
-        
-        Object.keys(this.meshes).forEach(k => this.meshes[k].visible = false);
-        
+        if (!CONFIG.WEAPONS[key]) return;
         this.currentWeaponKey = key;
-        this.weaponData = CONFIG.WEAPONS[key];
-        this.meshes[key].visible = true;
-        this.ammoCurrent = this.weaponData.ammoMax || 0;
-        this.isScoped = false;
-        document.getElementById('sniper-scope').classList.add('hidden');
+        this.currentWeapon = CONFIG.WEAPONS[key];
+        this.currentAmmo = this.currentWeapon.magSize;
+        
+        Object.keys(this.weaponModels).forEach(k => {
+            this.weaponModels[k].visible = (k === key);
+        });
     }
 
-    shoot(raycaster, targets, playerVelocity) {
-        const now = Date.now();
-        if (now - this.lastFired < this.weaponData.fireRate || this.isReloading) return null;
-        if (this.weaponData.type !== 'MELEE' && this.ammoCurrent <= 0) {
+    shoot(raycaster, targets, playerVel) {
+        // FIX: Block shooting if dead
+        if (window.gameInstance && window.gameInstance.player.isDead) return null;
+
+        const now = performance.now();
+        if (now - this.lastShotTime < this.currentWeapon.fireRate) return null;
+        if (this.currentAmmo <= 0) {
             this.reload();
             return null;
         }
 
-        this.lastFired = now;
-        if (this.weaponData.type !== 'MELEE') this.ammoCurrent--;
+        this.lastShotTime = now;
+        this.currentAmmo--;
 
         audioManager.playShoot(this.currentWeaponKey);
 
-        // Recoil effect
-        this.camera.rotation.x += this.weaponData.recoil || 0.02;
-
-        // Sniper Pushback Momentum & Impact Frame FX
-        if (this.currentWeaponKey === 'SNIPER') {
-            playerVelocity.z += this.weaponData.pushback;
-            this.effects.triggerSniperImpactFrames();
-            if (this.isScoped) this.toggleScope(); // Auto un-scope after shot
+        // Muzzle Flash Effect
+        const activeModel = this.weaponModels[this.currentWeaponKey];
+        if (activeModel) {
+            this.effects.createMuzzleFlash(activeModel.position);
         }
 
-        // Raycast Hit Detection
+        // Raycasting for hits
         raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
         const intersects = raycaster.intersectObjects(targets, true);
 
         if (intersects.length > 0) {
             const hit = intersects[0];
-            const isHead = hit.object.name === 'HEAD';
-            const damage = this.weaponData.damage * (isHead ? (this.weaponData.headshotMult || 1) : 1);
+            const isHead = (hit.object.name === 'HEAD');
+            const damage = isHead ? this.currentWeapon.damage * CONFIG.HEADSHOT_MULTIPLIER : this.currentWeapon.damage;
 
-            // Create hit particle FX
-            this.effects.createHitSparks(hit.point, isHead ? 0xff0055 : 0xffcc00);
-            
-            // Bullet Tracer
-            const muzzlePos = new THREE.Vector3().setFromMatrixPosition(this.meshes[this.currentWeaponKey].matrixWorld);
-            this.effects.createTracer(muzzlePos, hit.point);
+            this.effects.createHitEffect(hit.point);
+            audioManager.playHit();
 
-            audioManager.playHit(isHead);
-
-            return { target: hit.object, damage: damage, isHead: isHead };
+            return { target: hit.object, damage: damage, isHead: isHead, point: hit.point };
         }
 
         return null;
     }
 
-    toggleScope() {
-        if (this.currentWeaponKey !== 'SNIPER') return;
-        this.isScoped = !this.isScoped;
-        const scopeElem = document.getElementById('sniper-scope');
-        
-        if (this.isScoped) {
-            scopeElem.classList.remove('hidden');
-            this.camera.fov = 30;
-        } else {
-            scopeElem.classList.add('hidden');
-            this.camera.fov = CONFIG.FOV;
-        }
-        this.camera.updateProjectionMatrix();
-    }
-
     reload() {
-        if (this.isReloading || this.weaponData.type === 'MELEE') return;
+        if (this.isReloading) return;
         this.isReloading = true;
         setTimeout(() => {
-            this.ammoCurrent = this.weaponData.ammoMax;
+            this.currentAmmo = this.currentWeapon.magSize;
             this.isReloading = false;
-        }, this.weaponData.reloadTime);
+        }, this.currentWeapon.reloadTime);
+    }
+
+    toggleScope() {
+        this.isScoped = !this.isScoped;
+        this.camera.fov = this.isScoped ? CONFIG.FOV / this.currentWeapon.zoomFactor : CONFIG.FOV;
+        this.camera.updateProjectionMatrix();
     }
 }
