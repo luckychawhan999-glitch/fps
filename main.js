@@ -1,10 +1,5 @@
-// Safety guard: Prevents game from crashing if audio is missing
 if (typeof window.audioManager === 'undefined') {
-    window.audioManager = {
-        playDash: () => {},
-        playShoot: () => {},
-        playHit: () => {}
-    };
+    window.audioManager = { playDash: () => {}, playShoot: () => {}, playHit: () => {} };
 }
 
 class Game {
@@ -12,12 +7,12 @@ class Game {
         window.gameInstance = this;
 
         this.canvas = document.getElementById('game-canvas');
-        this.mode = 'SINGLEPLAYER'; // Start directly in game so controls work instantly!
+        this.mode = 'MENU';
 
         // Three.js Core Setup
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(CONFIG.FOV, window.innerWidth / window.innerHeight, CONFIG.NEAR, CONFIG.FAR);
-        this.camera.rotation.order = 'YXZ'; // Prevents flipped axis bug
+        this.camera.rotation.order = 'YXZ';
 
         this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -44,32 +39,24 @@ class Game {
             this.renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Click anywhere to lock pointer and hide menu
-        const clickHandler = () => {
+        // Click canvas to hide menu & request pointer lock
+        this.canvas.addEventListener('click', () => {
             if (this.ui) this.ui.hideMenu();
+            if (this.mode === 'MENU') this.startSingleplayer();
             this.canvas.requestPointerLock();
-        };
-
-        this.canvas.addEventListener('click', clickHandler);
-        document.addEventListener('click', (e) => {
-            if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
-                clickHandler();
-            }
         });
 
-        // Mouse look around (Works whenever Pointer Lock is active)
+        // Camera Look Around Controls
         window.addEventListener('mousemove', (e) => {
             if (document.pointerLockElement === this.canvas && !this.player.isDead) {
                 const sens = 0.0025;
                 this.camera.rotation.y -= e.movementX * sens;
                 this.camera.rotation.x -= e.movementY * sens;
-                
-                // Clamp look up/down limits
                 this.camera.rotation.x = Math.max(-Math.PI / 2.05, Math.min(Math.PI / 2.05, this.camera.rotation.x));
             }
         });
 
-        // Left Click Shoot
+        // Shooting Control
         window.addEventListener('mousedown', (e) => {
             if (e.button === 0 && document.pointerLockElement === this.canvas) {
                 if (this.player.isDead) return;
@@ -97,15 +84,31 @@ class Game {
     startSingleplayer() {
         this.mode = 'SINGLEPLAYER';
         if (this.ui) this.ui.hideMenu();
-        if (!this.spMode) this.spMode = new SingleplayerMode(this);
-        this.canvas.requestPointerLock();
+        
+        try {
+            if (typeof SingleplayerMode !== 'undefined') {
+                this.spMode = new SingleplayerMode(this);
+            }
+        } catch (err) {
+            console.warn("SingleplayerMode init issue:", err);
+        }
+
+        setTimeout(() => this.canvas.requestPointerLock(), 100);
     }
 
     startMultiplayer() {
         this.mode = 'MULTIPLAYER';
         if (this.ui) this.ui.hideMenu();
-        if (!this.mpMode) this.mpMode = new MultiplayerMode(this);
-        this.canvas.requestPointerLock();
+
+        try {
+            if (typeof MultiplayerMode !== 'undefined') {
+                this.mpMode = new MultiplayerMode(this);
+            }
+        } catch (err) {
+            console.warn("MultiplayerMode init issue:", err);
+        }
+
+        setTimeout(() => this.canvas.requestPointerLock(), 100);
     }
 
     animate() {
@@ -113,14 +116,15 @@ class Game {
 
         const delta = Math.min(this.clock.getDelta(), 0.1);
 
-        // Movement & physics update loop
-        this.physics.update(delta);
-        this.player.update(delta);
-        this.effects.update(delta);
-        this.ui.updateHUD(this.player);
+        if (this.mode !== 'MENU') {
+            this.physics.update(delta);
+            this.player.update(delta);
+            this.effects.update(delta);
+            this.ui.updateHUD(this.player);
 
-        if (this.mode === 'MULTIPLAYER' && this.mpMode) {
-            this.mpMode.update();
+            if (this.mode === 'MULTIPLAYER' && this.mpMode) {
+                this.mpMode.update();
+            }
         }
 
         this.renderer.render(this.scene, this.camera);
