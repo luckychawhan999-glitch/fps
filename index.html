@@ -3,173 +3,355 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ROBLOX RIVALS: ARENA FPS</title>
-    <link rel="stylesheet" href="style.css">
-    
-    <!-- Three.js & OrbitControls / PointerLock -->
+    <title>3D Arena Shooter</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        
+        #game-canvas { width: 100vw; height: 100vh; display: block; cursor: crosshair; }
+
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 10px; height: 10px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 10;
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: rgba(255,255,255,0.8);
+        }
+        #crosshair::before { top: 4px; left: -8px; width: 26px; height: 2px; }
+        #crosshair::after { top: -8px; left: 4px; width: 2px; height: 26px; }
+
+        /* HUD Overlay */
+        #hud {
+            position: absolute; bottom: 20px; left: 20px; right: 20px;
+            display: flex; justify-content: space-between; align-items: flex-end;
+            pointer-events: none; z-index: 10; color: white; text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+        }
+        .stat-box { background: rgba(0,0,0,0.6); padding: 12px 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+        .health-bar { width: 200px; height: 16px; background: #333; border-radius: 8px; overflow: hidden; margin-top: 6px; }
+        #health-fill { width: 100%; height: 100%; background: #2ecc71; transition: width 0.2s; }
+        .ammo-display { font-size: 32px; font-weight: bold; }
+        .ammo-sub { font-size: 16px; color: #aaa; }
+
+        /* Main Menu Overlay */
+        #menu-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 15, 20, 0.85); backdrop-filter: blur(8px);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 100; color: white;
+        }
+        h1 { font-size: 48px; margin-bottom: 10px; letter-spacing: 2px; text-transform: uppercase; color: #00d2d3; }
+        p { color: #888; margin-bottom: 30px; }
+        .btn-group { display: flex; gap: 15px; }
+        button {
+            padding: 14px 32px; font-size: 18px; font-weight: bold; border: none; border-radius: 6px;
+            background: #00d2d3; color: #111; cursor: pointer; transition: all 0.2s;
+        }
+        button:hover { background: #54a0ff; transform: translateY(-2px); }
+
+        /* Killfeed */
+        #killfeed { position: absolute; top: 20px; right: 20px; z-index: 10; display: flex; flex-direction: column; gap: 5px; }
+        .kill-entry { background: rgba(0,0,0,0.7); color: #fff; padding: 6px 12px; border-radius: 4px; font-size: 14px; }
+    </style>
+    <!-- Three.js Library CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
-    <!-- Cannon-es Physics Engine -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
-    
-    <!-- PeerJS WebRTC Multiplayer CDN -->
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
-    <!-- Game Canvas -->
+
     <canvas id="game-canvas"></canvas>
+    <div id="crosshair"></div>
 
-    <!-- Sniper Impact Effect Overlay -->
-    <div id="impact-overlay" class="hidden"></div>
-
-    <!-- UI Overlay -->
-    <div id="ui-container">
-        <!-- Main Menu -->
-        <div id="main-menu" class="glass-panel active">
-            <h1 class="logo">RIVALS <span class="highlight">ARENA</span></h1>
-            <p class="subtitle">FPS MULTIPLAYER & RANGE</p>
-            
-            <div class="menu-buttons">
-                <button id="btn-singleplayer" class="btn primary">TRAINING RANGE</button>
-                <button id="btn-multiplayer" class="btn secondary">MULTIPLAYER</button>
-                <button id="btn-settings" class="btn tertiary">SETTINGS</button>
-            </div>
+    <div id="hud">
+        <div class="stat-box">
+            <div>HEALTH</div>
+            <div class="health-bar"><div id="health-fill"></div></div>
         </div>
-
-        <!-- Multiplayer Sub-Menu -->
-        <div id="multiplayer-menu" class="glass-panel hidden">
-            <h2>MULTIPLAYER <span class="highlight">HUB</span></h2>
-            <div class="mp-options">
-                <button id="btn-create-room" class="btn primary">CREATE ROOM</button>
-                <div class="join-box">
-                    <input type="text" id="room-code-input" placeholder="ENTER ROOM CODE..." maxlength="6">
-                    <button id="btn-join-room" class="btn secondary">JOIN</button>
-                </div>
-                <button id="btn-mp-back" class="btn ghost">BACK</button>
-            </div>
-        </div>
-
-        <!-- Room Lobby Display -->
-        <div id="lobby-panel" class="glass-panel hidden">
-            <h2>ROOM <span class="highlight" id="display-room-code">------</span></h2>
-            <p>Share code with friends to join (Up to 4 Players)</p>
-            <div class="room-actions">
-                <button id="btn-copy-code" class="btn secondary">COPY CODE</button>
-                <button id="btn-start-match" class="btn primary">START MATCH</button>
-                <button id="btn-leave-room" class="btn ghost">LEAVE</button>
-            </div>
-            <div id="player-list-box">
-                <h3>CONNECTED PLAYERS:</h3>
-                <ul id="player-list"></ul>
-            </div>
-        </div>
-
-        <!-- Settings Modal -->
-        <div id="settings-menu" class="glass-panel hidden">
-            <h2>GAME <span class="highlight">SETTINGS</span></h2>
-            <div class="setting-row">
-                <label for="slider-sens">Mouse Sensitivity</label>
-                <input type="range" id="slider-sens" min="0.5" max="5" step="0.1" value="2">
-                <span id="val-sens">2.0</span>
-            </div>
-            <div class="setting-row">
-                <label for="slider-fov">Field of View (FOV)</label>
-                <input type="range" id="slider-fov" min="70" max="110" value="90">
-                <span id="val-fov">90</span>
-            </div>
-            <div class="setting-row">
-                <label for="slider-vol">Master Volume</label>
-                <input type="range" id="slider-vol" min="0" max="1" step="0.1" value="0.8">
-                <span id="val-vol">80%</span>
-            </div>
-            <button id="btn-settings-back" class="btn secondary">SAVE & CLOSE</button>
-        </div>
-
-        <!-- HUD (In-Game) -->
-        <div id="hud" class="hidden">
-            <!-- Dynamic Crosshair -->
-            <div id="crosshair">
-                <div class="ch-line top"></div>
-                <div class="ch-line bottom"></div>
-                <div class="ch-line left"></div>
-                <div class="ch-line right"></div>
-                <div class="ch-dot"></div>
-            </div>
-
-            <!-- Sniper Scope Overlay -->
-            <div id="sniper-scope" class="hidden">
-                <div class="scope-ring"></div>
-                <div class="scope-cross-h"></div>
-                <div class="scope-cross-v"></div>
-            </div>
-
-            <!-- Health Bar -->
-            <div id="health-box">
-                <div class="hud-label">HEALTH</div>
-                <div class="bar-background">
-                    <div id="health-bar-fill"></div>
-                </div>
-                <span id="health-value">100</span>
-            </div>
-
-            <!-- Weapon & Ammo Display -->
-            <div id="ammo-box">
-                <div id="weapon-name">ASSAULT RIFLE</div>
-                <div id="ammo-count"><span id="ammo-cur">20</span> / <span id="ammo-max">20</span></div>
-            </div>
-
-            <!-- Stats Panel (Single Player) -->
-            <div id="sp-stats" class="hud-panel left-top">
-                <div>KILLS: <span id="sp-kills" class="stat-val">0</span></div>
-                <div>ACCURACY: <span id="sp-acc" class="stat-val">100%</span></div>
-                <div>HEADSHOTS: <span id="sp-headshots" class="stat-val">0</span></div>
-                <div>STREAK: <span id="sp-streak" class="stat-val">0</span></div>
-            </div>
-
-            <!-- Top Match Header -->
-            <div id="top-info" class="hud-panel center-top">
-                <div id="game-mode-tag">RANGE</div>
-                <div id="network-ping">PING: <span id="ping-val">0</span> ms</div>
-                <div id="fps-display">FPS: 60</div>
-            </div>
-
-            <!-- Kill Feed -->
-            <div id="kill-feed"></div>
-
-            <!-- Hit Indicator / Notification -->
-            <div id="hit-notification" class="hidden">HEADSHOT!</div>
-
-            <!-- Scoreboard (Tab Key) -->
-            <div id="scoreboard" class="glass-panel hidden">
-                <h3>MATCH SCOREBOARD</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>PLAYER</th>
-                            <th>KILLS</th>
-                            <th>DEATHS</th>
-                            <th>PING</th>
-                        </tr>
-                    </thead>
-                    <tbody id="scoreboard-body"></tbody>
-                </table>
-            </div>
+        <div class="stat-box" style="text-align: right;">
+            <div>WEAPON / AMMO</div>
+            <div class="ammo-display"><span id="ammo-curr">30</span> <span class="ammo-sub">/ <span id="ammo-max">30</span></span></div>
+            <div id="weapon-name" style="color: #00d2d3; font-size: 14px; margin-top: 4px;">RIFLE (Press 1,2,3,4)</div>
         </div>
     </div>
 
-    <!-- Application Script Files -->
-    <script src="config.js"></script>
-    <script src="audio.js"></script>
-    <script src="effects.js"></script>
-    <script src="physics.js"></script>
-    <script src="arena.js"></script>
-    <script src="weapon.js"></script>
-    <script src="player.js"></script>
-    <script src="enemy.js"></script>
-    <script src="network.js"></script>
-    <script src="ui.js"></script>
-    <script src="singleplayer.js"></script>
-    <script src="multiplayer.js"></script>
-    <script src="main.js"></script>
+    <div id="killfeed"></div>
+
+    <div id="menu-container">
+        <h1>FPS ARENA</h1>
+        <p>Click below to lock mouse & start playing</p>
+        <div class="btn-group">
+            <button id="start-btn">PLAY / TRAINING</button>
+        </div>
+    </div>
+
+    <script>
+        // CONFIGURATION
+        const CONFIG = {
+            SPEED: 12,
+            JUMP: 8,
+            SENSITIVITY: 0.0022,
+            WEAPONS: {
+                KNIFE:  { name: "KNIFE",  ammo: 1,   rate: 400, damage: 50 },
+                PISTOL: { name: "PISTOL", ammo: 12,  rate: 200, damage: 25 },
+                RIFLE:  { name: "RIFLE",  ammo: 30,  rate: 100, damage: 20 },
+                SNIPER: { name: "SNIPER", ammo: 5,   rate: 800, damage: 90 }
+            }
+        };
+
+        // GAME STATE
+        let scene, camera, renderer;
+        let moveState = { forward: 0, right: 0 };
+        let velocity = new THREE.Vector3();
+        let isGrounded = false;
+        let targets = [];
+        let currentWeaponKey = 'RIFLE';
+        let currentAmmo = 30;
+        let lastShotTime = 0;
+        let weaponGroup;
+
+        function init() {
+            const canvas = document.getElementById('game-canvas');
+
+            // Scene & Camera setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a24);
+            scene.fog = new THREE.FogExp2(0x1a1a24, 0.015);
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.rotation.order = 'YXZ';
+            camera.position.set(0, 1.7, 0);
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(20, 40, 20);
+            scene.add(dirLight);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            // Arena Floor & Walls
+            buildArena();
+
+            // FPS Weapon Attachment
+            weaponGroup = new THREE.Group();
+            camera.add(weaponGroup);
+            scene.add(camera);
+            createWeaponModels();
+
+            // Practice Dummies
+            spawnTargetDummies();
+
+            // Input Listeners
+            setupControls(canvas);
+
+            // Game Loop
+            let lastTime = performance.now();
+            function animate(now) {
+                requestAnimationFrame(animate);
+                const delta = Math.min((now - lastTime) / 1000, 0.1);
+                lastTime = now;
+
+                updatePlayer(delta);
+                renderer.render(scene, camera);
+            }
+            animate(performance.now());
+        }
+
+        function buildArena() {
+            // Floor Grid
+            const floorGeo = new THREE.PlaneGeometry(80, 80);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x22252a, roughness: 0.8 });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            scene.add(floor);
+
+            const grid = new THREE.GridHelper(80, 40, 0x00d2d3, 0x444444);
+            grid.position.y = 0.01;
+            scene.add(grid);
+
+            // Cover Boxes
+            const boxGeo = new THREE.BoxGeometry(3, 3, 3);
+            const boxMat = new THREE.MeshStandardMaterial({ color: 0x00d2d3, roughness: 0.4 });
+            
+            const positions = [[-8, 1.5, -10], [8, 1.5, -12], [0, 1.5, -20], [-15, 1.5, -5], [15, 1.5, -5]];
+            positions.forEach(pos => {
+                const box = new THREE.Mesh(boxGeo, boxMat);
+                box.position.set(...pos);
+                scene.add(box);
+            });
+        }
+
+        function createWeaponModels() {
+            const mat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8 });
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.7), mat);
+            mesh.position.set(0.25, -0.25, -0.5);
+            weaponGroup.add(mesh);
+        }
+
+        function spawnTargetDummies() {
+            targets.forEach(t => scene.remove(t));
+            targets = [];
+
+            for (let i = 0; i < 6; i++) {
+                const group = new THREE.Group();
+                const mat = new THREE.MeshStandardMaterial({ color: 0xe74c3c });
+
+                // Body & Head
+                const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.4), mat);
+                body.position.y = 0.6;
+                const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshStandardMaterial({ color: 0xf1c40f }));
+                head.position.y = 1.45;
+                head.isHead = true;
+
+                group.add(body, head);
+                group.position.set((Math.random() - 0.5) * 50, 0, -5 - Math.random() * 35);
+                
+                scene.add(group);
+                targets.push(group);
+            }
+        }
+
+        function setupControls(canvas) {
+            const menu = document.getElementById('menu-container');
+            const startBtn = document.getElementById('start-btn');
+
+            const lockPointer = () => {
+                menu.style.display = 'none';
+                canvas.requestPointerLock();
+            };
+
+            startBtn.addEventListener('click', lockPointer);
+            canvas.addEventListener('click', lockPointer);
+
+            // Mouse Look
+            window.addEventListener('mousemove', (e) => {
+                if (document.pointerLockElement === canvas) {
+                    camera.rotation.y -= e.movementX * CONFIG.SENSITIVITY;
+                    camera.rotation.x -= e.movementY * CONFIG.SENSITIVITY;
+                    camera.rotation.x = Math.max(-Math.PI / 2.05, Math.min(Math.PI / 2.05, camera.rotation.x));
+                }
+            });
+
+            // Keyboard WASD & Weapon Switching
+            window.addEventListener('keydown', (e) => {
+                const k = e.key.toLowerCase();
+                if (k === 'w') moveState.forward = 1;
+                if (k === 's') moveState.forward = -1;
+                if (k === 'a') moveState.right = -1;
+                if (k === 'd') moveState.right = 1;
+
+                if (e.code === 'Space' && isGrounded) {
+                    velocity.y = CONFIG.JUMP;
+                    isGrounded = false;
+                }
+
+                // Weapon Selection
+                if (k === '1') selectWeapon('KNIFE');
+                if (k === '2') selectWeapon('PISTOL');
+                if (k === '3') selectWeapon('RIFLE');
+                if (k === '4') selectWeapon('SNIPER');
+            });
+
+            window.addEventListener('keyup', (e) => {
+                const k = e.key.toLowerCase();
+                if (k === 'w' || k === 's') moveState.forward = 0;
+                if (k === 'a' || k === 'd') moveState.right = 0;
+            });
+
+            // Shooting
+            window.addEventListener('mousedown', (e) => {
+                if (e.button === 0 && document.pointerLockElement === canvas) {
+                    shoot();
+                }
+            });
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        function selectWeapon(key) {
+            if (!CONFIG.WEAPONS[key]) return;
+            currentWeaponKey = key;
+            currentAmmo = CONFIG.WEAPONS[key].ammo;
+            document.getElementById('weapon-name').innerText = key + " (Press 1,2,3,4)";
+            document.getElementById('ammo-curr').innerText = currentAmmo;
+            document.getElementById('ammo-max').innerText = CONFIG.WEAPONS[key].ammo;
+        }
+
+        function shoot() {
+            const now = performance.now();
+            const wpn = CONFIG.WEAPONS[currentWeaponKey];
+            if (now - lastShotTime < wpn.rate) return;
+            if (currentAmmo <= 0) return;
+
+            lastShotTime = now;
+            currentAmmo--;
+            document.getElementById('ammo-curr').innerText = currentAmmo;
+
+            // Raycast shot from camera center
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+
+            let meshList = [];
+            targets.forEach(t => meshList.push(...t.children));
+
+            const hits = raycaster.intersectObjects(meshList);
+            if (hits.length > 0) {
+                const hitObj = hits[0].object;
+                const parentGroup = hitObj.parent;
+
+                // Kill feed entry
+                const feed = document.getElementById('killfeed');
+                const entry = document.createElement('div');
+                entry.className = 'kill-entry';
+                entry.innerText = hitObj.isHead ? "☠️ HEADSHOT DUMMY" : "💀 KILLED DUMMY";
+                feed.appendChild(entry);
+                setTimeout(() => entry.remove(), 3000);
+
+                // Respawn target dummy
+                parentGroup.position.set((Math.random() - 0.5) * 50, 0, -5 - Math.random() * 35);
+            }
+        }
+
+        function updatePlayer(delta) {
+            // Apply Movement Vectors
+            const forwardDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            forwardDir.y = 0;
+            forwardDir.normalize();
+
+            const sideDir = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+            sideDir.y = 0;
+            sideDir.normalize();
+
+            const moveDir = new THREE.Vector3();
+            moveDir.addScaledVector(forwardDir, moveState.forward);
+            moveDir.addScaledVector(sideDir, moveState.right);
+            if (moveDir.lengthSq() > 0) moveDir.normalize();
+
+            camera.position.x += moveDir.x * CONFIG.SPEED * delta;
+            camera.position.z += moveDir.z * CONFIG.SPEED * delta;
+
+            // Gravity & Ground collision
+            velocity.y -= 25 * delta;
+            camera.position.y += velocity.y * delta;
+
+            if (camera.position.y <= 1.7) {
+                camera.position.y = 1.7;
+                velocity.y = 0;
+                isGrounded = true;
+            }
+        }
+
+        window.onload = init;
+    </script>
 </body>
 </html>
