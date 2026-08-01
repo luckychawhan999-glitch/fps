@@ -2,55 +2,59 @@ class UIManager {
     constructor(game) {
         this.game = game;
 
-        this.menuContainer = document.getElementById('menu-container');
-        this.singleplayerBtn = document.getElementById('singleplayer-btn');
-        this.multiplayerBtn = document.getElementById('multiplayer-btn');
-        this.hostBtn = document.getElementById('host-btn');
-        this.joinBtn = document.getElementById('join-btn');
-
         this.healthFill = document.getElementById('health-fill');
         this.ammoCurrent = document.getElementById('ammo-current');
         this.ammoMax = document.getElementById('ammo-max');
         this.killfeedContainer = document.getElementById('killfeed-container');
 
-        this.setupMenuListeners();
+        this.setupSmartMenuListeners();
     }
 
-    setupMenuListeners() {
-        if (this.singleplayerBtn) {
-            this.singleplayerBtn.addEventListener('click', () => {
+    setupSmartMenuListeners() {
+        // Global listener: Auto-detects ANY button clicked on the page
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+
+            const text = (btn.innerText || "").toLowerCase();
+            const id = (btn.id || "").toLowerCase();
+
+            // Training / Singleplayer Button
+            if (text.includes('train') || text.includes('single') || id.includes('train') || id.includes('sp')) {
+                this.hideMenu();
                 this.game.startSingleplayer();
-            });
-        }
-
-        if (this.hostBtn) {
-            this.hostBtn.addEventListener('click', () => {
+            } 
+            // Multiplayer / Host Button
+            else if (text.includes('multi') || text.includes('host') || text.includes('create') || id.includes('multi') || id.includes('host')) {
+                this.hideMenu();
                 this.game.startMultiplayer();
-                if (network) {
-                    network.initHost((code) => {
-                        alert(`ROOM CREATED! Your Code: ${code}\nSend this code to your friend!`);
+                if (window.network) {
+                    window.network.initHost((code) => {
+                        alert(`ROOM CREATED!\nRoom Code: ${code}\nSend this code to your friend to join!`);
                     });
                 }
-            });
-        }
-
-        if (this.joinBtn) {
-            this.joinBtn.addEventListener('click', () => {
-                const code = prompt("Enter Room Code:");
-                if (code && network) {
+            } 
+            // Join Room Button
+            else if (text.includes('join') || id.includes('join')) {
+                const code = prompt("Enter 6-character Room Code:");
+                if (code && window.network) {
+                    this.hideMenu();
                     this.game.startMultiplayer();
-                    network.joinRoom(code, () => {
-                        alert("Connected to Room!");
+                    window.network.joinRoom(code, () => {
+                        alert("Successfully connected to room!");
                     });
                 }
-            });
-        }
+            }
+        });
     }
 
     hideMenu() {
-        if (this.menuContainer) {
-            this.menuContainer.style.display = 'none';
-        }
+        // Searches for and hides any menu container or overlay on screen
+        const menuSelectors = ['#menu-container', '#main-menu', '#menu', '.menu', '.overlay', '#ui-overlay'];
+        menuSelectors.forEach(selector => {
+            const el = document.querySelector(selector);
+            if (el) el.style.display = 'none';
+        });
     }
 
     updateHUD(player) {
@@ -67,7 +71,7 @@ class UIManager {
         if (!this.killfeedContainer) return;
 
         const entry = document.createElement('div');
-        entry.style.cssText = "background: rgba(0,0,0,0.7); color: #fff; padding: 4px 10px; margin-bottom: 4px; border-radius: 4px; font-weight: bold; font-family: monospace;";
+        entry.style.cssText = "background: rgba(0,0,0,0.75); color: #fff; padding: 6px 12px; margin-bottom: 4px; border-radius: 4px; font-weight: bold; font-family: sans-serif; font-size: 14px;";
         
         const emoji = isHead ? "☠️" : "💀";
         entry.innerHTML = `<span style="color:#ff4757">${killer}</span> ${emoji} <span style="color:#1e90ff">${victim}</span>`;
