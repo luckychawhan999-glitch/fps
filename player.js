@@ -15,12 +15,10 @@ class PlayerController {
         this.body = this.physics.addBox(new THREE.Vector3(0, 5, 0), new THREE.Vector3(1, CONFIG.PLAYER_HEIGHT, 1), false);
         this.body.fixedRotation = true;
 
-        // Character Mesh (Used for 3rd person / Remote players)
+        // Character Mesh
         this.mesh = this.createRobloxCharacterMesh(CONFIG.COLORS.DUMMY_BLUE);
         this.scene.add(this.mesh);
-
-        // FIX: Hide local player mesh so it doesn't clip into camera (fixes brown plate artifact)
-        this.mesh.visible = false;
+        this.mesh.visible = false; // Hide 3rd person local mesh to fix camera clipping
 
         this.setupControls();
     }
@@ -43,7 +41,7 @@ class PlayerController {
         torso.name = 'BODY';
         group.add(torso);
 
-        // Left & Right Arms
+        // Limbs
         const armGeo = new THREE.BoxGeometry(0.35, 1.0, 0.35);
         const lArm = new THREE.Mesh(armGeo, limbMat);
         lArm.position.set(-0.7, 0.5, 0);
@@ -53,7 +51,6 @@ class PlayerController {
         rArm.name = 'BODY';
         group.add(lArm, rArm);
 
-        // Left & Right Legs
         const legGeo = new THREE.BoxGeometry(0.38, 1.0, 0.38);
         const lLeg = new THREE.Mesh(legGeo, limbMat);
         lLeg.position.set(-0.25, -0.5, 0);
@@ -69,25 +66,34 @@ class PlayerController {
     setupControls() {
         window.addEventListener('keydown', (e) => {
             if (this.isDead) return;
-            
-            // Clean inputs (Fixed W jump bug)
-            if (e.code === 'KeyW') this.input.forward = 1;
-            if (e.code === 'KeyS') this.input.forward = -1;
-            if (e.code === 'KeyA') this.input.right = -1;
-            if (e.code === 'KeyD') this.input.right = 1;
 
-            if (e.code === 'Space') this.jump();
-            if (e.code === 'ShiftLeft') this.dash();
-            if (e.code === 'KeyR') this.weaponSystem.reload();
-            if (e.code === 'Digit1') this.weaponSystem.selectWeapon('KNIFE');
-            if (e.code === 'Digit2') this.weaponSystem.selectWeapon('PISTOL');
-            if (e.code === 'Digit3') this.weaponSystem.selectWeapon('RIFLE');
-            if (e.code === 'Digit4') this.weaponSystem.selectWeapon('SNIPER');
+            const key = e.key.toLowerCase();
+            const code = e.code;
+
+            // WASD Movement
+            if (key === 'w' || code === 'KeyW') this.input.forward = 1;
+            if (key === 's' || code === 'KeyS') this.input.forward = -1;
+            if (key === 'a' || code === 'KeyA') this.input.right = -1;
+            if (key === 'd' || code === 'KeyD') this.input.right = 1;
+
+            // Jump & Dash
+            if (code === 'Space' || key === ' ') this.jump();
+            if (code === 'ShiftLeft' || key === 'shift') this.dash();
+            
+            // Reload & Weapon Selection (Keys 1, 2, 3, 4)
+            if (key === 'r' || code === 'KeyR') this.weaponSystem.reload();
+            if (key === '1' || code === 'Digit1') this.weaponSystem.selectWeapon('KNIFE');
+            if (key === '2' || code === 'Digit2') this.weaponSystem.selectWeapon('PISTOL');
+            if (key === '3' || code === 'Digit3') this.weaponSystem.selectWeapon('RIFLE');
+            if (key === '4' || code === 'Digit4') this.weaponSystem.selectWeapon('SNIPER');
         });
 
         window.addEventListener('keyup', (e) => {
-            if (e.code === 'KeyW' || e.code === 'KeyS') this.input.forward = 0;
-            if (e.code === 'KeyA' || e.code === 'KeyD') this.input.right = 0;
+            const key = e.key.toLowerCase();
+            const code = e.code;
+
+            if (key === 'w' || key === 's' || code === 'KeyW' || code === 'KeyS') this.input.forward = 0;
+            if (key === 'a' || key === 'd' || code === 'KeyA' || code === 'KeyD') this.input.right = 0;
         });
 
         window.addEventListener('mousedown', (e) => {
@@ -118,13 +124,15 @@ class PlayerController {
     }
 
     jump() {
-        if (Math.abs(this.body.velocity.y) < 0.1) {
+        if (Math.abs(this.body.velocity.y) < 0.15) {
             this.body.velocity.y = CONFIG.PLAYER_JUMP_FORCE;
         }
     }
 
     dash() {
-        audioManager.playDash();
+        if (window.audioManager && window.audioManager.playDash) {
+            window.audioManager.playDash();
+        }
         const dir = new THREE.Vector3();
         this.camera.getWorldDirection(dir);
         dir.y = 0;
