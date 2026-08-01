@@ -1,67 +1,50 @@
 class SingleplayerMode {
     constructor(game) {
         this.game = game;
-        this.kills = 0;
-        this.headshots = 0;
-        this.shotsFired = 0;
-        this.shotsHit = 0;
-        this.streak = 0;
-
-        this.dummies = [];
-        this.initTargets();
+        this.targets = [];
+        this.spawnDummies();
     }
 
-    initTargets() {
-        for (let i = 0; i < 4; i++) {
-            const pos = new THREE.Vector3((Math.random() - 0.5) * 40, 0, -10 - Math.random() * 30);
-            const dummy = new DummyTarget(this.game.scene, this.game.physics, pos);
-            this.dummies.push(dummy);
+    spawnDummies() {
+        // Clean old dummies
+        this.targets.forEach(t => {
+            if (t.parentDummy) this.game.scene.remove(t.parentDummy);
+        });
+        this.targets = [];
+
+        // Spawn 5 Red Practice Dummies around the CODM Shipment arena
+        for (let i = 0; i < 5; i++) {
+            const dummy = this.game.player.createRobloxCharacterMesh(0xb22222);
+            dummy.visible = true; // Ensure practice dummies are visible
+
+            const x = (Math.random() - 0.5) * 40;
+            const z = (Math.random() - 0.5) * 40;
+            dummy.position.set(x, 1, z);
+
+            this.game.scene.add(dummy);
+
+            dummy.children.forEach(child => {
+                child.parentDummy = dummy;
+                this.targets.push(child);
+            });
         }
     }
 
     getHitTargets() {
-        const targets = [];
-        this.dummies.forEach(d => {
-            if (!d.isDead) {
-                targets.push(d.head, d.torso);
-            }
-        });
-        return targets;
+        return this.targets;
     }
 
     onShotFired(result) {
-        this.shotsFired++;
-        if (result) {
-            this.shotsHit++;
-            const dummyObj = this.dummies.find(d => d.head === result.target || d.torso === result.target);
-            if (dummyObj) {
-                const killed = dummyObj.takeDamage(result.damage);
-                if (result.isHead) this.headshots++;
+        if (!result || !result.target) return;
 
-                if (killed) {
-                    this.kills++;
-                    this.streak++;
-                    this.game.ui.addKillfeedEntry("PLAYER", "TARGET DUMMY", result.isHead);
+        const dummy = result.target.parentDummy || result.target.parent;
+        if (dummy) {
+            // Register Kill in HUD
+            this.game.ui.addKillfeedEntry("YOU", "DUMMY", result.isHead);
 
-                    // Respawn target after delay in random location
-                    setTimeout(() => {
-                        const newPos = new THREE.Vector3((Math.random() - 0.5) * 50, 0, -10 - Math.random() * 30);
-                        dummyObj.respawn(newPos);
-                    }, 1000);
-                }
-            }
-        } else {
-            this.streak = 0;
+            // Respawn dummy at random new location on map
+            dummy.position.x = (Math.random() - 0.5) * 40;
+            dummy.position.z = (Math.random() - 0.5) * 40;
         }
-
-        this.updateStatsUI();
-    }
-
-    updateStatsUI() {
-        document.getElementById('sp-kills').innerText = this.kills;
-        document.getElementById('sp-headshots').innerText = this.headshots;
-        document.getElementById('sp-streak').innerText = this.streak;
-        const acc = this.shotsFired > 0 ? Math.round((this.shotsHit / this.shotsFired) * 100) : 100;
-        document.getElementById('sp-acc').innerText = `${acc}%`;
     }
 }
