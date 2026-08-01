@@ -10,7 +10,7 @@ class WeaponSystem {
         this.isScoped = false;
         this.lastShotTime = 0;
 
-        // Weapon Models Rig attached to Camera
+        // Weapon Models Rig attached directly to FPS Camera
         this.weaponRig = new THREE.Group();
         this.camera.add(this.weaponRig);
         this.weaponModels = {};
@@ -20,7 +20,7 @@ class WeaponSystem {
     }
 
     buildWeaponModels() {
-        // 1. Katana
+        // 1. Katana (Key 1)
         const katana = new THREE.Group();
         const blade = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.2, 0.08), new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9 }));
         blade.position.set(0, 0.5, 0);
@@ -32,7 +32,7 @@ class WeaponSystem {
         this.weaponRig.add(katana);
         this.weaponModels['KNIFE'] = katana;
 
-        // 2. Pistol
+        // 2. Pistol (Key 2)
         const pistol = new THREE.Group();
         const pBody = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 0.4), new THREE.MeshStandardMaterial({ color: 0x222222 }));
         const pGrip = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.25, 0.12), new THREE.MeshStandardMaterial({ color: 0x111111 }));
@@ -43,13 +43,12 @@ class WeaponSystem {
         this.weaponRig.add(pistol);
         this.weaponModels['PISTOL'] = pistol;
 
-        // 3. Assault Rifle with COD Holo Sight
+        // 3. Assault Rifle with COD Red Holo Sight (Key 3)
         const rifle = new THREE.Group();
         const rBody = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 0.8), new THREE.MeshStandardMaterial({ color: 0x2d3436 }));
         const rMag = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.12), new THREE.MeshStandardMaterial({ color: 0x111111 }));
         rMag.position.set(0, -0.2, 0);
         
-        // COD Holo Sight Frame & Glowing Reticle
         const sightFrame = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.15), new THREE.MeshStandardMaterial({ color: 0x111111 }));
         sightFrame.position.set(0, 0.12, -0.1);
         const reticle = new THREE.Mesh(new THREE.RingGeometry(0.015, 0.02, 16), new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide }));
@@ -60,7 +59,7 @@ class WeaponSystem {
         this.weaponRig.add(rifle);
         this.weaponModels['RIFLE'] = rifle;
 
-        // 4. Sniper
+        // 4. Sniper Rifle (Key 4)
         const sniper = new THREE.Group();
         const sBody = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 1.2), new THREE.MeshStandardMaterial({ color: 0x353b48 }));
         const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.4), new THREE.MeshStandardMaterial({ color: 0x000000 }));
@@ -79,12 +78,13 @@ class WeaponSystem {
         this.currentAmmo = this.currentWeapon.magSize;
         
         Object.keys(this.weaponModels).forEach(k => {
-            this.weaponModels[k].visible = (k === key);
+            if (this.weaponModels[k]) {
+                this.weaponModels[k].visible = (k === key);
+            }
         });
     }
 
     shoot(raycaster, targets, playerVel) {
-        // FIX: Block shooting if dead
         if (window.gameInstance && window.gameInstance.player.isDead) return null;
 
         const now = performance.now();
@@ -97,15 +97,15 @@ class WeaponSystem {
         this.lastShotTime = now;
         this.currentAmmo--;
 
-        audioManager.playShoot(this.currentWeaponKey);
+        if (window.audioManager && window.audioManager.playShoot) {
+            window.audioManager.playShoot(this.currentWeaponKey);
+        }
 
-        // Muzzle Flash Effect
         const activeModel = this.weaponModels[this.currentWeaponKey];
         if (activeModel) {
             this.effects.createMuzzleFlash(activeModel.position);
         }
 
-        // Raycasting for hits
         raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
         const intersects = raycaster.intersectObjects(targets, true);
 
@@ -115,7 +115,10 @@ class WeaponSystem {
             const damage = isHead ? this.currentWeapon.damage * CONFIG.HEADSHOT_MULTIPLIER : this.currentWeapon.damage;
 
             this.effects.createHitEffect(hit.point);
-            audioManager.playHit();
+            
+            if (window.audioManager && window.audioManager.playHit) {
+                window.audioManager.playHit();
+            }
 
             return { target: hit.object, damage: damage, isHead: isHead, point: hit.point };
         }
