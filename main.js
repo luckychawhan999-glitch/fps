@@ -1,14 +1,23 @@
+// Safety guard: Prevents game from crashing if audio is missing
+if (typeof window.audioManager === 'undefined') {
+    window.audioManager = {
+        playDash: () => {},
+        playShoot: () => {},
+        playHit: () => {}
+    };
+}
+
 class Game {
     constructor() {
         window.gameInstance = this;
 
         this.canvas = document.getElementById('game-canvas');
-        this.mode = 'MENU'; // Starts in MENU, switches on click/play
+        this.mode = 'SINGLEPLAYER'; // Start directly in game so controls work instantly!
 
         // Three.js Core Setup
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(CONFIG.FOV, window.innerWidth / window.innerHeight, CONFIG.NEAR, CONFIG.FAR);
-        this.camera.rotation.order = 'YXZ'; // Prevents flipped camera bug
+        this.camera.rotation.order = 'YXZ'; // Prevents flipped axis bug
 
         this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -35,27 +44,32 @@ class Game {
             this.renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Click canvas to request pointer lock & start game if stuck
-        this.canvas.addEventListener('click', () => {
-            if (this.mode === 'MENU') {
-                this.startSingleplayer(); // Default to practice if clicked directly
-            }
+        // Click anywhere to lock pointer and hide menu
+        const clickHandler = () => {
+            if (this.ui) this.ui.hideMenu();
             this.canvas.requestPointerLock();
+        };
+
+        this.canvas.addEventListener('click', clickHandler);
+        document.addEventListener('click', (e) => {
+            if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
+                clickHandler();
+            }
         });
 
-        // Look around controls (Mouse movement)
+        // Mouse look around (Works whenever Pointer Lock is active)
         window.addEventListener('mousemove', (e) => {
             if (document.pointerLockElement === this.canvas && !this.player.isDead) {
-                const sens = 0.002;
+                const sens = 0.0025;
                 this.camera.rotation.y -= e.movementX * sens;
                 this.camera.rotation.x -= e.movementY * sens;
                 
-                // Clamp up/down looking angle
+                // Clamp look up/down limits
                 this.camera.rotation.x = Math.max(-Math.PI / 2.05, Math.min(Math.PI / 2.05, this.camera.rotation.x));
             }
         });
 
-        // Shooting listener
+        // Left Click Shoot
         window.addEventListener('mousedown', (e) => {
             if (e.button === 0 && document.pointerLockElement === this.canvas) {
                 if (this.player.isDead) return;
@@ -99,16 +113,14 @@ class Game {
 
         const delta = Math.min(this.clock.getDelta(), 0.1);
 
-        // Update loop ALWAYS runs when not in MENU
-        if (this.mode !== 'MENU') {
-            this.physics.update(delta);
-            this.player.update(delta);
-            this.effects.update(delta);
-            this.ui.updateHUD(this.player);
+        // Movement & physics update loop
+        this.physics.update(delta);
+        this.player.update(delta);
+        this.effects.update(delta);
+        this.ui.updateHUD(this.player);
 
-            if (this.mode === 'MULTIPLAYER' && this.mpMode) {
-                this.mpMode.update();
-            }
+        if (this.mode === 'MULTIPLAYER' && this.mpMode) {
+            this.mpMode.update();
         }
 
         this.renderer.render(this.scene, this.camera);
