@@ -1,143 +1,165 @@
-class WeaponSystem {
-    constructor(camera, effects) {
+class PlayerController {
+    constructor(camera, scene, physics, effects) {
         this.camera = camera;
+        this.scene = scene;
+        this.physics = physics;
         this.effects = effects;
 
-        this.currentWeaponKey = 'RIFLE';
-        this.currentWeapon = CONFIG.WEAPONS.RIFLE;
-        this.currentAmmo = this.currentWeapon.magSize;
-        this.isReloading = false;
-        this.isScoped = false;
-        this.lastShotTime = 0;
+        this.health = 100;
+        this.isDead = false;
+        this.input = { forward: 0, right: 0 };
 
-        // Weapon Models Rig attached directly to FPS Camera
-        this.weaponRig = new THREE.Group();
-        this.camera.add(this.weaponRig);
-        this.weaponModels = {};
+        this.weaponSystem = new WeaponSystem(this.camera, this.effects);
 
-        this.buildWeaponModels();
-        this.selectWeapon('RIFLE');
+        // Physics Body
+        this.body = this.physics.addBox(new THREE.Vector3(0, 5, 0), new THREE.Vector3(1, CONFIG.PLAYER_HEIGHT, 1), false);
+        this.body.fixedRotation = true;
+
+        // Character Mesh
+        this.mesh = this.createRobloxCharacterMesh(CONFIG.COLORS.DUMMY_BLUE);
+        this.scene.add(this.mesh);
+        this.mesh.visible = false; // Hide 3rd person local mesh to fix camera clipping
+
+        this.setupControls();
     }
 
-    buildWeaponModels() {
-        // 1. Katana (Key 1)
-        const katana = new THREE.Group();
-        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.2, 0.08), new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9 }));
-        blade.position.set(0, 0.5, 0);
-        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-        handle.position.set(0, -0.1, 0);
-        katana.add(blade, handle);
-        katana.position.set(0.3, -0.3, -0.5);
-        katana.rotation.x = Math.PI / 4;
-        this.weaponRig.add(katana);
-        this.weaponModels['KNIFE'] = katana;
+    createRobloxCharacterMesh(color) {
+        const group = new THREE.Group();
+        const yellowMat = new THREE.MeshStandardMaterial({ color: CONFIG.COLORS.DUMMY_YELLOW, roughness: 0.3 });
+        const bodyMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.3 });
+        const limbMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
 
-        // 2. Pistol (Key 2)
-        const pistol = new THREE.Group();
-        const pBody = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 0.4), new THREE.MeshStandardMaterial({ color: 0x222222 }));
-        const pGrip = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.25, 0.12), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-        pGrip.position.set(0, -0.15, 0.1);
-        pGrip.rotation.x = -0.2;
-        pistol.add(pBody, pGrip);
-        pistol.position.set(0.25, -0.25, -0.4);
-        this.weaponRig.add(pistol);
-        this.weaponModels['PISTOL'] = pistol;
+        // Head
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), yellowMat);
+        head.position.y = 1.4;
+        head.name = 'HEAD';
+        group.add(head);
 
-        // 3. Assault Rifle with COD Red Holo Sight (Key 3)
-        const rifle = new THREE.Group();
-        const rBody = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 0.8), new THREE.MeshStandardMaterial({ color: 0x2d3436 }));
-        const rMag = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.3, 0.12), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-        rMag.position.set(0, -0.2, 0);
-        
-        const sightFrame = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.15), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-        sightFrame.position.set(0, 0.12, -0.1);
-        const reticle = new THREE.Mesh(new THREE.RingGeometry(0.015, 0.02, 16), new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide }));
-        reticle.position.set(0, 0.12, -0.12);
+        // Torso
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.1, 0.5), bodyMat);
+        torso.position.y = 0.5;
+        torso.name = 'BODY';
+        group.add(torso);
 
-        rifle.add(rBody, rMag, sightFrame, reticle);
-        rifle.position.set(0.25, -0.25, -0.5);
-        this.weaponRig.add(rifle);
-        this.weaponModels['RIFLE'] = rifle;
+        // Limbs
+        const armGeo = new THREE.BoxGeometry(0.35, 1.0, 0.35);
+        const lArm = new THREE.Mesh(armGeo, limbMat);
+        lArm.position.set(-0.7, 0.5, 0);
+        lArm.name = 'BODY';
+        const rArm = new THREE.Mesh(armGeo, limbMat);
+        rArm.position.set(0.7, 0.5, 0);
+        rArm.name = 'BODY';
+        group.add(lArm, rArm);
 
-        // 4. Sniper Rifle (Key 4)
-        const sniper = new THREE.Group();
-        const sBody = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.18, 1.2), new THREE.MeshStandardMaterial({ color: 0x353b48 }));
-        const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.4), new THREE.MeshStandardMaterial({ color: 0x000000 }));
-        scope.rotation.x = Math.PI / 2;
-        scope.position.set(0, 0.12, -0.1);
-        sniper.add(sBody, scope);
-        sniper.position.set(0.25, -0.25, -0.6);
-        this.weaponRig.add(sniper);
-        this.weaponModels['SNIPER'] = sniper;
+        const legGeo = new THREE.BoxGeometry(0.38, 1.0, 0.38);
+        const lLeg = new THREE.Mesh(legGeo, limbMat);
+        lLeg.position.set(-0.25, -0.5, 0);
+        lLeg.name = 'BODY';
+        const rLeg = new THREE.Mesh(legGeo, limbMat);
+        rLeg.position.set(0.25, -0.5, 0);
+        rLeg.name = 'BODY';
+        group.add(lLeg, rLeg);
+
+        return group;
     }
 
-    selectWeapon(key) {
-        if (!CONFIG.WEAPONS[key]) return;
-        this.currentWeaponKey = key;
-        this.currentWeapon = CONFIG.WEAPONS[key];
-        this.currentAmmo = this.currentWeapon.magSize;
-        
-        Object.keys(this.weaponModels).forEach(k => {
-            if (this.weaponModels[k]) {
-                this.weaponModels[k].visible = (k === key);
-            }
+    setupControls() {
+        window.addEventListener('keydown', (e) => {
+            if (this.isDead) return;
+
+            const key = e.key.toLowerCase();
+            const code = e.code;
+
+            // WASD Movement
+            if (key === 'w' || code === 'KeyW') this.input.forward = 1;
+            if (key === 's' || code === 'KeyS') this.input.forward = -1;
+            if (key === 'a' || code === 'KeyA') this.input.right = -1;
+            if (key === 'd' || code === 'KeyD') this.input.right = 1;
+
+            // Jump & Dash
+            if (code === 'Space' || key === ' ') this.jump();
+            if (code === 'ShiftLeft' || key === 'shift') this.dash();
+            
+            // Reload & Weapon Selection (Keys 1, 2, 3, 4)
+            if (key === 'r' || code === 'KeyR') this.weaponSystem.reload();
+            if (key === '1' || code === 'Digit1') this.weaponSystem.selectWeapon('KNIFE');
+            if (key === '2' || code === 'Digit2') this.weaponSystem.selectWeapon('PISTOL');
+            if (key === '3' || code === 'Digit3') this.weaponSystem.selectWeapon('RIFLE');
+            if (key === '4' || code === 'Digit4') this.weaponSystem.selectWeapon('SNIPER');
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            const code = e.code;
+
+            if (key === 'w' || key === 's' || code === 'KeyW' || code === 'KeyS') this.input.forward = 0;
+            if (key === 'a' || key === 'd' || code === 'KeyA' || code === 'KeyD') this.input.right = 0;
+        });
+
+        window.addEventListener('mousedown', (e) => {
+            if (e.button === 2) this.weaponSystem.toggleScope();
         });
     }
 
-    shoot(raycaster, targets, playerVel) {
-        if (window.gameInstance && window.gameInstance.player.isDead) return null;
+    takeDamage(amount) {
+        if (this.isDead) return false;
+        this.health -= amount;
 
-        const now = performance.now();
-        if (now - this.lastShotTime < this.currentWeapon.fireRate) return null;
-        if (this.currentAmmo <= 0) {
-            this.reload();
-            return null;
+        if (this.health <= 0) {
+            this.health = 0;
+            this.isDead = true;
+            setTimeout(() => this.respawn(), 3000);
+            return true;
         }
-
-        this.lastShotTime = now;
-        this.currentAmmo--;
-
-        if (window.audioManager && window.audioManager.playShoot) {
-            window.audioManager.playShoot(this.currentWeaponKey);
-        }
-
-        const activeModel = this.weaponModels[this.currentWeaponKey];
-        if (activeModel) {
-            this.effects.createMuzzleFlash(activeModel.position);
-        }
-
-        raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
-        const intersects = raycaster.intersectObjects(targets, true);
-
-        if (intersects.length > 0) {
-            const hit = intersects[0];
-            const isHead = (hit.object.name === 'HEAD');
-            const damage = isHead ? this.currentWeapon.damage * CONFIG.HEADSHOT_MULTIPLIER : this.currentWeapon.damage;
-
-            this.effects.createHitEffect(hit.point);
-            
-            if (window.audioManager && window.audioManager.playHit) {
-                window.audioManager.playHit();
-            }
-
-            return { target: hit.object, damage: damage, isHead: isHead, point: hit.point };
-        }
-
-        return null;
+        return false;
     }
 
-    reload() {
-        if (this.isReloading) return;
-        this.isReloading = true;
-        setTimeout(() => {
-            this.currentAmmo = this.currentWeapon.magSize;
-            this.isReloading = false;
-        }, this.currentWeapon.reloadTime);
+    respawn() {
+        this.health = 100;
+        this.isDead = false;
+        const spawnX = (Math.random() - 0.5) * 20;
+        const spawnZ = (Math.random() - 0.5) * 20;
+        this.body.position.set(spawnX, 4, spawnZ);
+        this.body.velocity.set(0, 0, 0);
     }
 
-    toggleScope() {
-        this.isScoped = !this.isScoped;
-        this.camera.fov = this.isScoped ? CONFIG.FOV / this.currentWeapon.zoomFactor : CONFIG.FOV;
-        this.camera.updateProjectionMatrix();
+    jump() {
+        if (Math.abs(this.body.velocity.y) < 0.15) {
+            this.body.velocity.y = CONFIG.PLAYER_JUMP_FORCE;
+        }
+    }
+
+    dash() {
+        if (window.audioManager && window.audioManager.playDash) {
+            window.audioManager.playDash();
+        }
+        const dir = new THREE.Vector3();
+        this.camera.getWorldDirection(dir);
+        dir.y = 0;
+        dir.normalize();
+        this.body.velocity.x += dir.x * CONFIG.PLAYER_DASH_SPEED;
+        this.body.velocity.z += dir.z * CONFIG.PLAYER_DASH_SPEED;
+    }
+
+    update(delta) {
+        if (this.isDead) return;
+
+        const front = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
+        front.y = 0;
+        front.normalize();
+        const side = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+        side.y = 0;
+        side.normalize();
+
+        const moveDir = new THREE.Vector3();
+        moveDir.addScaledVector(front, this.input.forward);
+        moveDir.addScaledVector(side, this.input.right);
+        moveDir.normalize();
+
+        this.body.velocity.x = moveDir.x * CONFIG.PLAYER_SPEED;
+        this.body.velocity.z = moveDir.z * CONFIG.PLAYER_SPEED;
+
+        this.camera.position.set(this.body.position.x, this.body.position.y + 0.8, this.body.position.z);
+        this.mesh.position.copy(this.body.position);
     }
 }
